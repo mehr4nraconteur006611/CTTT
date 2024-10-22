@@ -128,6 +128,7 @@ class PointNetEncoder(nn.Module):
         x = self.bn3(self.conv3(x))
         x = torch.max(x, 2, keepdim=True)[0]
         x = x.view(-1, 1024)
+        trans = x.clone()
         if self.global_feat:
             return x, trans, trans_feat
         else:
@@ -182,7 +183,7 @@ class get_model(nn.Module):
         x = F.relu(self.bn2(self.dropout(self.fc2(x))))
         x = self.fc3(x)
         x = F.log_softmax(x, dim=1)
-        return x, trans_feat
+        return x, trans_feat, trans
 
 class get_loss(torch.nn.Module):
     def __init__(self, mat_diff_loss_scale=0.001):
