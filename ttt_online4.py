@@ -550,8 +550,8 @@ def main(args):
             plot_teacher_predictions_multiple_thresholds_with_accuracy
             )
         '''
-        plot_grouped_bar_chart(correct_teacher_pseudo_labels,correct_student_pseudo_labels,teacher_student_equal_labels,base_image_save_path, "Comparison of Pseudo Labels")
-        plot_label_situation_function_corruption(teacher_pseudo_labels,
+        helper_plots.plot_grouped_bar_chart(correct_teacher_pseudo_labels,correct_student_pseudo_labels,teacher_student_equal_labels,base_image_save_path, "Comparison of Pseudo Labels")
+        helper_plots.plot_label_situation_function_corruption(teacher_pseudo_labels,
                                 weakaug_student_pseudo_labels,
                                 strongaug_student_pseudo_labels,
                                 original_labels,
@@ -560,15 +560,15 @@ def main(args):
                                 strongaug_student_pseudo_labels_prob,
                                 base_image_save_path, "Label condition")
 
-        plot_teacher_confidence_stacked_bar(teacher_pseudo_labels_prob, base_image_save_path, "Teacher Prediction Confidence Distribution")
-        compute_and_plot_metrics_for_corruptions(teacher_pseudo_labels_prob, weakaug_student_pseudo_labels_prob, 
+        helper_plots.plot_teacher_confidence_stacked_bar(teacher_pseudo_labels_prob, base_image_save_path, "Teacher Prediction Confidence Distribution")
+        helper_plots.compute_and_plot_metrics_for_corruptions(teacher_pseudo_labels_prob, weakaug_student_pseudo_labels_prob, 
                                                 strongaug_student_pseudo_labels_prob, original_labels,
                                                 confidence_threshold=0.7, base_image_save_path=base_image_save_path,
                                                 title_prefix='Label Confidence Distribution')
 
-        plot_teacher_predictions_multiple_thresholds(teacher_pseudo_labels_prob, original_labels, thresholds=[0.5, 0.7, 0.9], base_image_save_path=base_image_save_path, title_prefix='Teacher Predictions by Thresholds')
-        plot_teacher_predictions_multiple_thresholds11(teacher_pseudo_labels_prob, original_labels, thresholds=[0.5, 0.7, 0.9], base_image_save_path=base_image_save_path, title_prefix='Teacher Predictions by Thresholds')
-        plot_teacher_predictions_multiple_thresholds_with_accuracy(teacher_pseudo_labels_prob, original_labels, thresholds=[0.5, 0.7, 0.9], base_image_save_path=base_image_save_path, title_prefix='Teacher Predictions by Thresholds')
+        helper_plots.plot_teacher_predictions_multiple_thresholds(teacher_pseudo_labels_prob, original_labels, thresholds=[0.5, 0.7, 0.9], base_image_save_path=base_image_save_path, title_prefix='Teacher Predictions by Thresholds')
+        helper_plots.plot_teacher_predictions_multiple_thresholds11(teacher_pseudo_labels_prob, original_labels, thresholds=[0.5, 0.7, 0.9], base_image_save_path=base_image_save_path, title_prefix='Teacher Predictions by Thresholds')
+        helper_plots.plot_teacher_predictions_multiple_thresholds_with_accuracy(teacher_pseudo_labels_prob, original_labels, thresholds=[0.5, 0.7, 0.9], base_image_save_path=base_image_save_path, title_prefix='Teacher Predictions by Thresholds')
 
         # Specifying the directory to zip
         directory_to_zip = "/content/CTTT/SaveImage"
