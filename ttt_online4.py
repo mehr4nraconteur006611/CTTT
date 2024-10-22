@@ -300,9 +300,7 @@ def main(args):
     log_string('Load dataset ...')
 
     corruptions = [
-        'uniform', 'gaussian', 'background', 'impulse', 'upsampling',
-        'distortion_rbf', 'distortion_rbf_inv', 'density', 'density_inc',
-        'shear', 'rotation', 'cutout', 'distortion', 'occlusion', 'lidar'
+        'uniform'
     ]
     dataset_name = args.dataset_name
     npoints = args.num_point
@@ -414,7 +412,7 @@ def main(args):
                 for grad_step in range(args.grad_steps):
                     if dataset_name == 'modelnet':
                         points1 = data.to(args.device)
-                        points=points1.copy()
+                        points = points1.clone()
                         if args.IWF:
                             points = process_point_cloud(points1, neighbour=5).reshape(1,-1,3)
                             points = points.permute(0, 2, 1)  # Now the shape will be [1, 3, 1024]
