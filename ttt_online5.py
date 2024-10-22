@@ -48,7 +48,7 @@ def parse_args():
     parser.add_argument('--use_uniform_sample', action='store_true', default=False, help='use uniform sampling')
     parser.add_argument('--dataset_name', default='modelnet', help='model name [default: modelnet]')
     parser.add_argument('--tta_dataset_path',type=str, default='/content/CTTT/modelnet40_c/modelnet40_c', help='TTA dataset path')
-    parser.add_argument('--model_path', type=str, default="/content/CTTT/pretrained_model/modelnet_jt.pth" , help='pretrined model path')
+    parser.add_argument('--model_path', type=str, default="/content/CTTT/pretrained_model/" , help='pretrined model path')
     parser.add_argument('--base_image_save_path', type=str, default='/content/CTTT/SaveImage' , help='save image path')
 
     parser.add_argument('--severity', default=5, help='severity for corruption dataset')
@@ -371,11 +371,9 @@ def main(args):
     
     print('teacher_model ',teacher_model)
 
-    if 'state_dict' in checkpoint:
-        model_state_dict = checkpoint['state_dict']
-    else:
-        model_state_dict = checkpoint
 
+    teacher_model.load_state_dict(checkpoint['model_state_dict'])
+    student_model.load_state_dict(checkpoint['model_state_dict'])
 
 
     # Freezing Teacher model
@@ -409,13 +407,13 @@ def main(args):
     for i in range(0, num_points, batch_size_for_processing):
         batch_points = points[i:i + batch_size_for_processing]
         pred_student_original, _, trans_feat_original = teacher_model(batch_points.transpose(2, 1))
+        # print("trans_feat_original:",trans_feat_original.shape)
 
         # Concatenate the results
         features = torch.cat((features, trans_feat_original), dim=0)
         probability = torch.cat((probability, pred_student_original), dim=0)
 
-        # print("Features shape:",features.shape)
-    # print("Features shape:", final_features)
+    # print("Features shape:",features.shape)
 
     num_classes = pred_student_original.shape[1]
 
@@ -423,6 +421,8 @@ def main(args):
 
     final_features = torch.zeros((num_classes, trans_feat_original.shape[1]), dtype=torch.float32).to(args.device)
     final_probability = torch.zeros((num_classes, num_classes), dtype=torch.float32).to(args.device)
+    # print("Features shape:", final_probability.shape)
+    # print("Features shape:", final_features)
 
     for class_idx in range(num_classes):
         class_mask = (class_indices == class_idx)
