@@ -371,9 +371,17 @@ def main(args):
     
     print('teacher_model ',teacher_model)
 
+    if 'model_state_dict' in checkpoint:
+        # model_state_dict = checkpoint['state_dict']
+        teacher_model.load_state_dict(checkpoint['model_state_dict'])
+        student_model.load_state_dict(checkpoint['model_state_dict'])
+    else:
+        # model_state_dict = checkpoint
+        teacher_model.load_state_dict(checkpoint)
+        student_model.load_state_dict(checkpoint)
 
-    teacher_model.load_state_dict(checkpoint['model_state_dict'])
-    student_model.load_state_dict(checkpoint['model_state_dict'])
+    # teacher_model.load_state_dict(checkpoint['model_state_dict'])
+    # student_model.load_state_dict(checkpoint['model_state_dict'])
 
 
     # Freezing Teacher model
