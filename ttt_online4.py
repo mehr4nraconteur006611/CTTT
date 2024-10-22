@@ -300,7 +300,9 @@ def main(args):
     log_string('Load dataset ...')
 
     corruptions = [
-        'uniform'
+        'uniform', 'gaussian', 'background', 'impulse', 'upsampling',
+        'distortion_rbf', 'distortion_rbf_inv', 'density', 'density_inc',
+        'shear', 'rotation', 'cutout', 'distortion', 'occlusion', 'lidar'
     ]
     dataset_name = args.dataset_name
     npoints = args.num_point
