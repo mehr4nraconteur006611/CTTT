@@ -256,7 +256,6 @@ class DGCNN_clsfeat(nn.Module):
         x2 = F.adaptive_avg_pool1d(x, 1).view(batch_size, -1)           # (batch_size, emb_dims, num_points) -> (batch_size, emb_dims)
         x = torch.cat((x1, x2), 1)              # (batch_size, emb_dims*2)
         h=x.clone()
-        print('h ', h.shape)
         
         
         
