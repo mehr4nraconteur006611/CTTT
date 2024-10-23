@@ -5,6 +5,15 @@ import os
 import matplotlib.pyplot as plt
 
 
+modelnet40_class_names = [
+    'airplane', 'bathtub', 'bed', 'bench', 'bookshelf', 'bottle', 'bowl', 'car', 'chair', 'cone',
+    'cup', 'curtain', 'desk', 'door', 'dresser', 'flower_pot', 'glass_box', 'guitar', 'keyboard',
+    'lamp', 'laptop', 'mantel', 'monitor', 'night_stand', 'person', 'piano', 'plant', 'radio',
+    'range_hood', 'sink', 'sofa', 'stairs', 'stool', 'table', 'tent', 'toilet', 'tv_stand',
+    'vase', 'wardrobe', 'xbox'
+]
+
+
 def plot_teacher_predictions_multiple_thresholds_with_accuracy(teacher_pseudo_labels_prob, original_labels, thresholds=[0.5, 0.7, 0.9], base_image_save_path='', title_prefix='Teacher Predictions by Thresholds'):
     
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(20, 16))  # Two plots: ax1 for the first plot, ax2 for the accuracy plot
@@ -653,7 +662,7 @@ def plot_label_situation_function_corruption(teacher_pseudo_labels_dict,
         plt.close()
 
         # NEW PLOT: Pseudo-label distribution (stacked histogram) for each corruption type
-        label_range = np.arange(0, np.max(original_labels) + 1)  # Assuming labels are integers starting from 0
+        label_range = np.arange(0, len(modelnet40_class_names))  # Range for ModelNet40 classes
 
         plt.figure(figsize=(12, 6))
 
@@ -668,11 +677,14 @@ def plot_label_situation_function_corruption(teacher_pseudo_labels_dict,
         colors = ['blue', 'green', 'red', 'black']
         labels = ['Teacher Pseudo-labels', 'Weak Augmented Student Pseudo-labels', 'Strong Augmented Student Pseudo-labels', 'Original Correct Labels']
 
-        # Stacked histogram
-        counts, bins, bars = plt.hist(hist_data, bins=label_range, stacked=True, color=colors, label=labels, density=True)
+        # Stacked histogram with ModelNet40 class names on x-axis
+        counts, bins, bars = plt.hist(hist_data, bins=np.arange(len(modelnet40_class_names)+1), stacked=True, color=colors, label=labels, density=True)
+
+        # Adjust the tick positions to center the labels under each bin
+        plt.xticks(ticks=(bins[:-1] + bins[1:]) / 2, labels=modelnet40_class_names, rotation=90, ha='center')  # Center the labels
 
         plt.title(f"Label Distribution - {corruption_type}")
-        plt.xlabel("Label Class (Category)")
+        plt.xlabel("Label Class (ModelNet40 Category)")
         plt.ylabel("Proportion of Labels")
         plt.legend(loc='upper right')
         plt.tight_layout()
@@ -682,14 +694,14 @@ def plot_label_situation_function_corruption(teacher_pseudo_labels_dict,
         plt.close()
 
         # NEW: Create and save the table separately
-        counts_teacher, _ = np.histogram(teacher_pseudo_labels_flat, bins=label_range)
-        counts_weak_student, _ = np.histogram(weakaug_student_pseudo_labels_flat, bins=label_range)
-        counts_strong_student, _ = np.histogram(strongaug_student_pseudo_labels_flat, bins=label_range)
-        counts_original, _ = np.histogram(original_labels_flat, bins=label_range)
+        counts_teacher, _ = np.histogram(teacher_pseudo_labels_flat, bins=np.arange(len(modelnet40_class_names)+1))
+        counts_weak_student, _ = np.histogram(weakaug_student_pseudo_labels_flat, bins=np.arange(len(modelnet40_class_names)+1))
+        counts_strong_student, _ = np.histogram(strongaug_student_pseudo_labels_flat, bins=np.arange(len(modelnet40_class_names)+1))
+        counts_original, _ = np.histogram(original_labels_flat, bins=np.arange(len(modelnet40_class_names)+1))
 
-        # Create DataFrame for the table
+        # Create DataFrame for the table with class names
         table_data = {
-            'Class Label': label_range[:-1],
+            'Class Label': modelnet40_class_names,  # Use class names instead of numbers
             'Teacher Pseudo-labels': counts_teacher,
             'Weak Augmented Student Pseudo-labels': counts_weak_student,
             'Strong Augmented Student Pseudo-labels': counts_strong_student,
@@ -742,5 +754,3 @@ def plot_label_situation_function_corruption(teacher_pseudo_labels_dict,
     # Save the final aggregated plot
     plt.savefig(f"{base_image_save_path}/{plot_title}_Final_Aggregated.png", bbox_inches='tight')
     plt.close()
-
-
