@@ -442,11 +442,11 @@ class Modelfeat(nn.Module):
                 
             x = self.pos_blocks_list[i](x)  # [b,d,g]
 
-        h=x.clone()
         # print('h2 ',x.shape)
 
         x = F.adaptive_max_pool1d(x, 1).squeeze(dim=-1)
         # x1 = self.classifier(x)
+        h=x.clone()
         
         
         
