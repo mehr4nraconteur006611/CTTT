@@ -185,6 +185,56 @@ class get_model(nn.Module):
         x = F.log_softmax(x, dim=1)
         return x, trans_feat, trans
 
+
+
+
+class get_loss_pointmlp(torch.nn.Module):
+    def __init__(self, smoothing=True, eps=0.2):
+        super(get_loss_pointmlp, self).__init__()
+        """
+        Initialize the LossPointMLP class.
+
+        Parameters:
+        - smoothing: Boolean, if True apply label smoothing.
+        - eps: Float, the epsilon value used for label smoothing.
+        """
+        self.smoothing = smoothing
+        self.eps = eps
+
+    def forward(self, pred, gold, trans_feat):
+        """
+        Compute the cross entropy loss with or without label smoothing.
+
+        Parameters:
+        - pred: Tensor, the predicted outputs (logits) from the model.
+        - gold: Tensor, the ground truth labels.
+
+        Returns:
+        - loss: Tensor, the computed loss.
+        """
+        gold = gold.contiguous().view(-1)
+        
+        if self.smoothing:
+            n_class = pred.size(1)
+            one_hot = torch.zeros_like(pred).scatter(1, gold.view(-1, 1), 1)
+            one_hot = one_hot * (1 - self.eps) + (1 - one_hot) * self.eps / (n_class - 1)
+            log_prb = F.log_softmax(pred, dim=1)
+            loss = -(one_hot * log_prb).sum(dim=1).mean()
+        else:
+            loss = F.cross_entropy(pred, gold, reduction='mean')
+
+        return loss
+
+
+class get_loss_dgcnn(torch.nn.Module):
+    def __init__(self, mat_diff_loss_scale=0.001):
+        super(get_loss_dgcnn, self).__init__()
+        self.mat_diff_loss_scale = mat_diff_loss_scale
+
+    def forward(self, pred, target, trans_feat):
+        loss = F.nll_loss(pred, target)
+        return loss
+
 class get_loss(torch.nn.Module):
     def __init__(self, mat_diff_loss_scale=0.001):
         super(get_loss, self).__init__()
