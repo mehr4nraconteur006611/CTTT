@@ -260,6 +260,56 @@ def generate_weighted_pseudo_labels1(stu_pred, aug_stu_pred, teacher_pred, teach
 
     return pseudo_labels
 
+
+def make_feature(teacher_model):
+      # Step 1: Create empty tensors for features and probability
+    featurese = torch.tensor([], dtype=torch.float32).to(args.device)
+    probabilitye = torch.tensor([], dtype=torch.float32).to(args.device)
+
+    # Step 2: Generate random point cloud data with a batch size of 32
+    # num_points = 1024
+    points12 = torch.rand((1024, 1024, 3)) * 2 - 1  # Random points in the range [-1, 1]
+    points12 = points12.to(args.device)
+    # Step 3: Define the batch size for processing
+    # batch_size_for_processing = 64
+
+    # Step 4: Apply the pre-trained model to each batch of size 128
+    for i in range(0, 1024, 64):
+        batch_points = points12[i:i + 64]
+        pred_student_original1, _, trans_feat_original1 = teacher_model(batch_points.transpose(2, 1))
+        # print("trans_feat_original:",trans_feat_original.shape)
+
+        # Concatenate the results
+        featurese = torch.cat((featurese, trans_feat_original1), dim=0)
+        probabilitye = torch.cat((probabilitye, pred_student_original1), dim=0)
+
+    print("Features shape:",featurese.shape)
+
+    num_classese = pred_student_original1.shape[1]
+
+    class_indicese = torch.argmax(probabilitye, dim=1)
+
+    final_features = torch.zeros((num_classese, trans_feat_original1.shape[1]), dtype=torch.float32).to(args.device)
+    final_probability = torch.zeros((num_classese, num_classese), dtype=torch.float32).to(args.device)
+    # print("Features shape:", final_probability.shape)
+    print("Features shape:", final_features.shape)
+
+    for class_idx in range(num_classese):
+        class_mask = (class_indicese == class_idx)
+        if class_mask.sum() > 0:
+            final_features[class_idx] = featurese[class_mask].mean(dim=0)
+            final_probability[class_idx] = probabilitye[class_mask].mean(dim=0)
+
+    # Ensure the final feature matrix has shape (40, 1024) and the probability matrix has shape (40, 40)
+    # final_features = mean_features
+    # final_probability = mean_probability
+
+    # print("Final Features shape:", final_features.shape)
+    # print("Final Features shape:", final_features)
+    # print("Final Probability shape:", final_probability.shape)
+    # print("Final Probability shape:", final_probability)
+    return final_features, final_probability
+    
 def main(args):
     def log_string(str):
         logger.info(str)
@@ -338,18 +388,22 @@ def main(args):
         teacher_model = model.get_model(num_class, normal_channel=args.use_normals)
         # student_model = teacher_model.copy()
         student_model = model.get_model(num_class, normal_channel=args.use_normals)
+        teacher_model_2 = model.get_model(num_class, normal_channel=args.use_normals)
+
         criterion = model.get_loss()
 
 
 
     print(args.device)
     teacher_model = teacher_model.to(args.device)
+    teacher_model_2 = teacher_model.to(args.device)
+
     student_model = student_model.to(args.device)
     criterion = criterion.to(args.device)
 
     teacher_model.apply(inplace_relu)
     student_model.apply(inplace_relu)
-
+    teacher_model_2.apply(inplace_relu)
     # Load weights into both teacher and student models
     model_path = args.model_path
 
@@ -380,10 +434,14 @@ def main(args):
         # model_state_dict = checkpoint['state_dict']
         teacher_model.load_state_dict(checkpoint['model_state_dict'])
         student_model.load_state_dict(checkpoint['model_state_dict'])
+        teacher_model_2.load_state_dict(checkpoint['model_state_dict'])
+        
     else:
         # model_state_dict = checkpoint
         teacher_model.load_state_dict(checkpoint)
         student_model.load_state_dict(checkpoint)
+        teacher_model_2.load_state_dict(checkpoint)
+
 
     # teacher_model.load_state_dict(checkpoint['model_state_dict'])
     # student_model.load_state_dict(checkpoint['model_state_dict'])
@@ -404,61 +462,11 @@ def main(args):
     else:
         optimizer = torch.optim.SGD(student_model.parameters(), lr=0.01, momentum=0.9)
 
-    teacher_model.zero_grad()
-    teacher_model.eval()
-	    # Step 1: Create empty tensors for features and probability
-    featurese = torch.tensor([], dtype=torch.float32).to(args.device)
-    probabilitye = torch.tensor([], dtype=torch.float32).to(args.device)
-
-    # Step 2: Generate random point cloud data with a batch size of 32
-    # num_points = 1024
-    points12 = torch.rand((1024, 1024, 3)) * 2 - 1  # Random points in the range [-1, 1]
-    points12 = points12.to(args.device)
-    # Step 3: Define the batch size for processing
-    # batch_size_for_processing = 64
-
-    # Step 4: Apply the pre-trained model to each batch of size 128
-    for i in range(0, 1024, 64):
-        batch_points = points12[i:i + batch_size_for_processing]
-        pred_student_original1, _, trans_feat_original1 = teacher_model(batch_points.transpose(2, 1))
-        # print("trans_feat_original:",trans_feat_original.shape)
-
-        # Concatenate the results
-        featurese = torch.cat((featurese, trans_feat_original1), dim=0)
-        probabilitye = torch.cat((probability, pred_student_original1), dim=0)
-
-    print("Features shape:",featurese.shape)
-
-    num_classese = pred_student_original1.shape[1]
-
-    class_indicese = torch.argmax(probabilitye, dim=1)
-
-    final_features = torch.zeros((num_classese, trans_feat_original1.shape[1]), dtype=torch.float32).to(args.device)
-    final_probability = torch.zeros((num_classese, num_classese), dtype=torch.float32).to(args.device)
-    # print("Features shape:", final_probability.shape)
-    print("Features shape:", final_features.shape)
-
-    for class_idx in range(num_classese):
-        class_mask = (class_indices == class_idx)
-        if class_mask.sum() > 0:
-            final_features[class_idx] = featurese[class_mask].mean(dim=0)
-            final_probability[class_idx] = probabilitye[class_mask].mean(dim=0)
-
-    # Ensure the final feature matrix has shape (40, 1024) and the probability matrix has shape (40, 40)
-    # final_features = mean_features
-    # final_probability = mean_probability
-
-    # print("Final Features shape:", final_features.shape)
-    # print("Final Features shape:", final_features)
-    # print("Final Probability shape:", final_probability.shape)
-    # print("Final Probability shape:", final_probability)
-    teacher_model.zero_grad()
+    teacher_model_2.zero_grad()
+    teacher_model_2.eval()
+    final_features, final_probability=make_feature(teacher_model_2)
+    teacher_model_2.zero_grad()
     
-
-
-
-
-
 
 
     final_accuracy = {}
