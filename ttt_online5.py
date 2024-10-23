@@ -324,19 +324,24 @@ def main(args):
     elif args.model == 'pointmlp':
         teacher_model = PointNetCls_pointmlp(k=num_class, feature_transform=True, input_transform=True, log=True if loss_type != 'focal_loss' else False,FPFH_type=False)
         student_model = teacher_model.copy()
+        criterion = model.get_loss_pointmlp()
     elif args.model == 'dgcnn':
         teacher_model = PointNetCls_DGCNN(k=num_class, feature_transform=True, input_transform=True, log=True if loss_type != 'focal_loss' else False,FPFH_type=False)
         student_model = teacher_model.copy()
+        criterion = model.get_loss_dgcnn()
+
     elif args.model == 'pointnet2':
         teacher_model = PointNet2Cls(k=num_class, feature_transform=True, input_transform=True, log=True if loss_type != 'focal_loss' else False,FPFH_type=False)
         student_model = teacher_model.copy()
+        criterion = model.get_loss()
     elif args.model == 'pointnet_cls':
         teacher_model = model.get_model(num_class, normal_channel=args.use_normals)
         # student_model = teacher_model.copy()
         student_model = model.get_model(num_class, normal_channel=args.use_normals)
+        criterion = model.get_loss()
 
-    criterion = model.get_loss()
-    
+
+
     print(args.device)
     teacher_model = teacher_model.to(args.device)
     student_model = student_model.to(args.device)
@@ -399,55 +404,56 @@ def main(args):
     else:
         optimizer = torch.optim.SGD(student_model.parameters(), lr=0.01, momentum=0.9)
 
-	
+    teacher_model.zero_grad()
+    teacher_model.eval()
 	    # Step 1: Create empty tensors for features and probability
-    features = torch.tensor([], dtype=torch.float32).to(args.device)
-    probability = torch.tensor([], dtype=torch.float32).to(args.device)
+    featurese = torch.tensor([], dtype=torch.float32).to(args.device)
+    probabilitye = torch.tensor([], dtype=torch.float32).to(args.device)
 
     # Step 2: Generate random point cloud data with a batch size of 32
-    num_points = 1024
-    points = torch.rand((num_points, 1024, 3)) * 2 - 1  # Random points in the range [-1, 1]
-    points = points.to(args.device)
+    # num_points = 1024
+    points12 = torch.rand((1024, 1024, 3)) * 2 - 1  # Random points in the range [-1, 1]
+    points12 = points12.to(args.device)
     # Step 3: Define the batch size for processing
-    batch_size_for_processing = 64
+    # batch_size_for_processing = 64
 
     # Step 4: Apply the pre-trained model to each batch of size 128
-    for i in range(0, num_points, batch_size_for_processing):
-        batch_points = points[i:i + batch_size_for_processing]
-        pred_student_original, _, trans_feat_original = teacher_model(batch_points.transpose(2, 1))
+    for i in range(0, 1024, 64):
+        batch_points = points12[i:i + batch_size_for_processing]
+        pred_student_original1, _, trans_feat_original1 = teacher_model(batch_points.transpose(2, 1))
         # print("trans_feat_original:",trans_feat_original.shape)
 
         # Concatenate the results
-        features = torch.cat((features, trans_feat_original), dim=0)
-        probability = torch.cat((probability, pred_student_original), dim=0)
+        featurese = torch.cat((featurese, trans_feat_original1), dim=0)
+        probabilitye = torch.cat((probability, pred_student_original1), dim=0)
 
-    # print("Features shape:",features.shape)
+    print("Features shape:",featurese.shape)
 
-    num_classes = pred_student_original.shape[1]
+    num_classese = pred_student_original1.shape[1]
 
-    class_indices = torch.argmax(probability, dim=1)
+    class_indicese = torch.argmax(probabilitye, dim=1)
 
-    final_features = torch.zeros((num_classes, trans_feat_original.shape[1]), dtype=torch.float32).to(args.device)
-    final_probability = torch.zeros((num_classes, num_classes), dtype=torch.float32).to(args.device)
+    final_features = torch.zeros((num_classese, trans_feat_original1.shape[1]), dtype=torch.float32).to(args.device)
+    final_probability = torch.zeros((num_classese, num_classese), dtype=torch.float32).to(args.device)
     # print("Features shape:", final_probability.shape)
-    # print("Features shape:", final_features)
+    print("Features shape:", final_features.shape)
 
-    for class_idx in range(num_classes):
+    for class_idx in range(num_classese):
         class_mask = (class_indices == class_idx)
         if class_mask.sum() > 0:
-            final_features[class_idx] = features[class_mask].mean(dim=0)
-            final_probability[class_idx] = probability[class_mask].mean(dim=0)
+            final_features[class_idx] = featurese[class_mask].mean(dim=0)
+            final_probability[class_idx] = probabilitye[class_mask].mean(dim=0)
 
     # Ensure the final feature matrix has shape (40, 1024) and the probability matrix has shape (40, 40)
     # final_features = mean_features
     # final_probability = mean_probability
 
-    print("Final Features shape:", final_features.shape)
-    print("Final Features shape:", final_features)
-    print("Final Probability shape:", final_probability.shape)
-    print("Final Probability shape:", final_probability)
-
-
+    # print("Final Features shape:", final_features.shape)
+    # print("Final Features shape:", final_features)
+    # print("Final Probability shape:", final_probability.shape)
+    # print("Final Probability shape:", final_probability)
+    teacher_model.zero_grad()
+    
 
 
 
@@ -533,20 +539,21 @@ def main(args):
                         points1 = points1.permute(0, 2, 1)  # Now the shape will be [1, 3, 1024]
 
                         labels = labels.to(args.device)
-                        pred_teacher, _, _ = teacher_model(points)
+                        pred_teacher, _ ,_= teacher_model(points)
                         pseudo_labels = pred_teacher.argmax(dim=1).to(args.device)
                         pseudo_labels = pseudo_labels.long().to(args.device)
                         
-                        pred_student_original, trans_feat_original, _ = student_model(points)
+                        pred_student_original, trans_feat_original,_ = student_model(points)
                         pred_student = pred_student_original.argmax(dim=1).to(args.device)
                         stu_pseudo_labels = pred_student.long().to(args.device)
+
 
                         #pseudo_labels = torch.max(pred_teacher, pred_student_original).argmax(dim=1).to(args.device)                 
 
                         augmented_points = augment_data(points1)
 
                         # Predictions for original and augmented data
-                        pred_student_augmented, trans_feat_augmented, _ = student_model(augmented_points)
+                        pred_student_augmented, trans_feat_augmented, _= student_model(augmented_points)
                         pred_student_au = pred_student_augmented.argmax(dim=1).to(args.device)
                         stu_pseudo_labels_aug = pred_student_au.long().to(args.device)
 
