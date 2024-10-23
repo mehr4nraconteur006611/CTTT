@@ -62,7 +62,7 @@ def parse_args():
     parser.add_argument('--batch_size_tta', type=int, default=1, help='batch size in training')
     parser.add_argument('--enable_plots', action='store_true', default=True, help='plots images')
     parser.add_argument('--IWF', action='store_true', default=True, help='enable invariant weak Filtering')
-    
+    parser.add_argument('--label_refinement', action='store_true', default=True, help='enable pseudo label refinement')
     parser.add_argument('--seed', type=int, default=10, help='random seed for reproducibility')
     
     return parser.parse_args()
@@ -245,20 +245,49 @@ def generate_weighted_pseudo_labels(stu_pred, aug_stu_pred, teacher_pred, teache
     pseudo_labels_class_indices = torch.argmax(smoothed_labels, dim=1)
 
     return pseudo_labels_class_indices
-def generate_weighted_pseudo_labels1(stu_pred, aug_stu_pred, teacher_pred, teacher_weight=1.0):
-    # Apply weighting to the teacher probabilities
-    weighted_teacher_pred = teacher_weight * teacher_pred
 
-    # Stack all predictions along a new dimension
-    combined_probs = torch.stack([stu_pred, aug_stu_pred, weighted_teacher_pred], dim=0)
 
-    # Find the maximum probability along the stacked dimension (0) and get the corresponding class
-    max_probs, max_indices = torch.max(combined_probs, dim=0)
 
-    # Use the class with the highest probability as the pseudo-labels
-    pseudo_labels = torch.argmax(max_probs, dim=1)
+def assign_pseudo_labels_with_confidence_logic(stu_pred, aug_stu_pred, teacher_pred, teacher_conf_threshold_high=0.85, teacher_conf_threshold_low=0.8):
+    """
+    Assigns pseudo-labels based on teacher confidence:
+    - If teacher's confidence is > 0.9, use teacher's prediction.
+    - If teacher's confidence is between 0.9 and 0.7, use the average of teacher and student.
+    - If teacher's confidence is < 0.7, use the mean of teacher, student, and augmented student predictions.
+    """
+    
+    stu_confidence, stu_labels = torch.max(F.softmax(stu_pred, dim=1), dim=1)  
+    teacher_confidence, teacher_labels = torch.max(F.softmax(teacher_pred, dim=1), dim=1)  
+    
 
-    return pseudo_labels
+    teacher_prob = F.softmax(teacher_pred, dim=1)
+    student_prob = F.softmax(stu_pred, dim=1)
+    aug_student_prob = F.softmax(aug_stu_pred, dim=1)
+
+
+    high_conf_mask = teacher_confidence > teacher_conf_threshold_high
+    mid_conf_mask = (teacher_confidence <= teacher_conf_threshold_high) & (teacher_confidence > teacher_conf_threshold_low)
+    low_conf_mask = teacher_confidence <= teacher_conf_threshold_low
+
+    # High confidence (> 0.9): Use teacher's prediction
+    pseudo_labels = torch.where(high_conf_mask, teacher_labels, stu_labels)  
+
+    # Mid confidence (between 0.7 and 0.9): Average between teacher and student
+    avg_prob_mid = (teacher_prob + student_prob) / 2.0
+    pseudo_labels_mid = torch.argmax(avg_prob_mid, dim=1)
+    pseudo_labels = torch.where(mid_conf_mask, pseudo_labels_mid, pseudo_labels)
+
+    # Low confidence (< 0.7): Mean of teacher, student, and augmented student
+    avg_prob_low = (teacher_prob + student_prob + aug_student_prob) / 3.0
+    pseudo_labels_low = torch.argmax(avg_prob_low, dim=1)
+    pseudo_labels = torch.where(low_conf_mask, pseudo_labels_low, pseudo_labels)
+
+    #(1 = Teacher, 2 = Average, 3 = Mean)
+    label_source = torch.where(high_conf_mask, torch.ones_like(teacher_labels), torch.zeros_like(teacher_labels))
+    label_source = torch.where(mid_conf_mask, torch.full_like(teacher_labels, 2), label_source)
+    label_source = torch.where(low_conf_mask, torch.full_like(teacher_labels, 3), label_source)
+
+    return pseudo_labels, label_source
 
 
 def make_feature(teacher_model):
@@ -268,7 +297,8 @@ def make_feature(teacher_model):
 
     # Step 2: Generate random point cloud data with a batch size of 32
     # num_points = 1024
-    points12 = torch.rand((1024, 1024, 3)) * 2 - 1  # Random points in the range [-1, 1]
+    #points12 = torch.rand((1024, 1024, 3)) * 2 - 1  # Random points in the range [-1, 1]
+    points12 = torch.load('points12.pt')
     points12 = points12.to(args.device)
     # Step 3: Define the batch size for processing
     # batch_size_for_processing = 64
@@ -396,14 +426,12 @@ def main(args):
 
     print(args.device)
     teacher_model = teacher_model.to(args.device)
-    teacher_model_2 = teacher_model.to(args.device)
 
     student_model = student_model.to(args.device)
     criterion = criterion.to(args.device)
 
     teacher_model.apply(inplace_relu)
     student_model.apply(inplace_relu)
-    teacher_model_2.apply(inplace_relu)
     # Load weights into both teacher and student models
     model_path = args.model_path
 
@@ -434,13 +462,11 @@ def main(args):
         # model_state_dict = checkpoint['state_dict']
         teacher_model.load_state_dict(checkpoint['model_state_dict'])
         student_model.load_state_dict(checkpoint['model_state_dict'])
-        teacher_model_2.load_state_dict(checkpoint['model_state_dict'])
         
     else:
         # model_state_dict = checkpoint
         teacher_model.load_state_dict(checkpoint)
         student_model.load_state_dict(checkpoint)
-        teacher_model_2.load_state_dict(checkpoint)
 
 
     # teacher_model.load_state_dict(checkpoint['model_state_dict'])
@@ -462,10 +488,18 @@ def main(args):
     else:
         optimizer = torch.optim.SGD(student_model.parameters(), lr=0.01, momentum=0.9)
 
-    teacher_model_2.zero_grad()
-    teacher_model_2.eval()
-    final_features, final_probability=make_feature(teacher_model_2)
-    teacher_model_2.zero_grad()
+    '''
+    import torch
+
+    # Generate random points in the range [-1, 1]
+    points12 = torch.rand((1024, 1024, 3)) * 2 - 1
+
+    # Save the generated points to a file
+    torch.save(points12, 'points12.pt')
+    '''
+    
+    teacher_model.eval()
+    final_features, final_probability=make_feature(teacher_model)
     
 
 
@@ -566,6 +600,8 @@ def main(args):
                         stu_pseudo_labels_aug = pred_student_au.long().to(args.device)
 
                         #pseudo_labels = generate_weighted_pseudo_labels(pred_student_original, pred_student_augmented, pred_teacher).long().to(args.device)
+                        if args.label_refinement:
+                            pseudo_labels,_ = assign_pseudo_labels_with_confidence_logic(pred_student_original, pred_student_augmented, pred_teacher, teacher_conf_threshold_high=0.85, teacher_conf_threshold_low=0.8)
 
                         #classification_loss = criterion(pred_student_original, pseudo_labels, trans_feat_original)
                         classification_loss = criterion(pred_student_original, pseudo_labels,trans_feat_original)                        # Consistency loss (difference between original and augmented predictions)
