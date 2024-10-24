@@ -67,10 +67,6 @@ def parse_args():
     
     return parser.parse_args()
 
-
-
-
-
 def load_tta_dataset(args):
     # we have 3 choices - every tta_loader returns only point and labels
     root = args.tta_dataset_path  # being lazy - 1
@@ -106,9 +102,6 @@ def load_tta_dataset(args):
     print(f'\n\n Loading data from ::: {root} ::: level ::: {args.severity}\n\n')
 
     return tta_loader
-
-
-
 
 
     
@@ -340,7 +333,11 @@ def make_feature(teacher_model):
     # print("Final Probability shape:", final_probability.shape)
     # print("Final Probability shape:", final_probability)
     return final_features, final_probability
-    
+
+
+
+
+
 def main(args):
     def log_string(str):
         logger.info(str)
@@ -392,10 +389,6 @@ def main(args):
     num_class = args.num_category
     level = [5]
 
-
-
-
-
     '''MODEL LOADING'''
     loss_type = 'focal_loss'
     model = importlib.import_module('pointnet_cls')
@@ -423,8 +416,6 @@ def main(args):
         teacher_model_2 = model.get_model(num_class, normal_channel=args.use_normals)
 
         criterion = model.get_loss()
-
-
 
     print(args.device)
     teacher_model = teacher_model.to(args.device)
@@ -492,7 +483,6 @@ def main(args):
 
     '''
     import torch
-
     # Generate random points in the range [-1, 1]
     points12 = torch.rand((1024, 1024, 3)) * 2 - 1
 
@@ -509,7 +499,6 @@ def main(args):
     total_entropy_losses = {corruption: 0.0 for corruption in corruptions}
     loss_counts = {corruption: 0 for corruption in corruptions}  # Count the number of losses for averaging
 
-
     final_accuracy = {}
 
     if args.enable_plots :
@@ -523,7 +512,6 @@ def main(args):
         teacher_confidance_scores={}
         weakaug_student_confidance_scores={}
         strongaug_student_confidance_scores={}
-
 
     correct_teacher_pseudo_labels = {}
     correct_student_pseudo_labels = {}
@@ -546,11 +534,9 @@ def main(args):
             test_pred = torch.tensor([], dtype=torch.long).to(torch.device(args.device))
             test_label = torch.tensor([], dtype=torch.long).to(torch.device(args.device))
 
-
             correct_teacher_pseudo_labels[args.corruption] = 0
             correct_student_pseudo_labels[args.corruption] = 0
             teacher_student_equal_labels[args.corruption] = 0 
-
 
             if args.enable_plots :
                 teacher_pseudo_labels[args.corruption] = list()
@@ -564,7 +550,6 @@ def main(args):
                 weakaug_student_confidance_scores[args.corruption]=list()
                 strongaug_student_confidance_scores[args.corruption]=list()
 
-
             for idx, (data, labels) in enumerate(tta_loader):
                 student_model.zero_grad()
                 student_model.train()
@@ -573,9 +558,8 @@ def main(args):
                 for m in student_model.modules():
                     if isinstance(m, torch.nn.BatchNorm1d) or isinstance(m, torch.nn.BatchNorm2d) or isinstance(m, torch.nn.BatchNorm3d):
                         m.eval()
-                
+                        
                 teacher_model.eval()
-
 
                 for grad_step in range(args.grad_steps):
                     if dataset_name == 'modelnet':
@@ -595,7 +579,6 @@ def main(args):
                         pred_student_original, trans_feat_original,_ = student_model(points)
                         pred_student = pred_student_original.argmax(dim=1).to(args.device)
                         stu_pseudo_labels = pred_student.long().to(args.device)
-
 
                         #pseudo_labels = torch.max(pred_teacher, pred_student_original).argmax(dim=1).to(args.device)                 
 
@@ -651,14 +634,12 @@ def main(args):
                             strongaug_student_pseudo_labels_prob[args.corruption].append(pred_student_augmented)
                             original_labels[args.corruption].append(labels)
 
-
                         if pseudo_labels == labels:
                             correct_teacher_pseudo_labels[args.corruption] += 1
                         if pred_student == labels:
                             correct_student_pseudo_labels[args.corruption] += 1
                         if pred_student == pseudo_labels:
                             teacher_student_equal_labels[args.corruption] += 1
-
 
                         '''
                         log_string(f'[TEST - {args.corruption}], Sample - {idx} / {total_batches},'
@@ -690,7 +671,6 @@ def main(args):
                               f'entropy_loss_value {lambda_entropy * entropy_loss_value.item():.3f}, '
                               f'Total Loss {total_loss.item():.3f}')
 
-
             # Compute the mean for each scaled loss component after all batches are processed
             total_classification_losses[args.corruption] /= loss_counts[args.corruption]
             total_consistency_losses[args.corruption] /= loss_counts[args.corruption]
@@ -701,7 +681,6 @@ def main(args):
             acc = (test_pred == test_label).sum().item() / float(test_label.size(0)) * 100.
             log_string(f'\n\n######## Final Accuracy ::: {args.corruption} ::: {acc} ########\n\n')
             final_accuracy[args.corruption] = acc
-
 
     log_string('------------------------------train finished -----------------------------')
     for _, args.corruption in enumerate(corruptions):
@@ -715,11 +694,7 @@ def main(args):
 
     # Concatenate the list of probabilities into a single tensor
 
-
-
-
     if args.enable_plots :
-
         base_image_save_path = args.base_image_save_path
 
         # Check if the directory exists, if not, create it
@@ -727,10 +702,8 @@ def main(args):
             os.makedirs(base_image_save_path)
 
         print(f"Directory created at {base_image_save_path}")
-
         import shutil
         import helper_plots
-
         helper_plots.plot_grouped_bar_chart(correct_teacher_pseudo_labels,correct_student_pseudo_labels,teacher_student_equal_labels,base_image_save_path, "Comparison of Pseudo Labels")
         helper_plots.plot_label_situation_function_corruption(teacher_pseudo_labels,
                                 weakaug_student_pseudo_labels,
@@ -740,8 +713,6 @@ def main(args):
                                 weakaug_student_pseudo_labels_prob,
                                 strongaug_student_pseudo_labels_prob,
                                 base_image_save_path, "Label condition")
-
-
         helper_plots.plot_mean_losses_and_accuracy(
                                     corruptions,
                                     total_classification_losses,
@@ -759,7 +730,6 @@ def main(args):
         helper_plots.plot_teacher_predictions_multiple_thresholds(teacher_pseudo_labels_prob, original_labels, thresholds=[0.5, 0.7, 0.9], base_image_save_path=base_image_save_path, title_prefix='Teacher Predictions by Thresholds')
         helper_plots.plot_teacher_predictions_multiple_thresholds11(teacher_pseudo_labels_prob, original_labels, thresholds=[0.5, 0.7, 0.9], base_image_save_path=base_image_save_path, title_prefix='Teacher Predictions by Thresholds')
         helper_plots.plot_teacher_predictions_multiple_thresholds_with_accuracy(teacher_pseudo_labels_prob, original_labels, thresholds=[0.5, 0.7, 0.9], base_image_save_path=base_image_save_path, title_prefix='Teacher Predictions by Thresholds')
-
         directory_to_zip = "/content/CTTT/SaveImage"
         output_filename = "/content/CTTT/SaveImage.zip"
         shutil.make_archive(output_filename.replace('.zip', ''), 'zip', directory_to_zip)
