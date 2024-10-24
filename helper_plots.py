@@ -13,6 +13,62 @@ modelnet40_class_names = [
     'vase', 'wardrobe', 'xbox'
 ]
 
+def plot_mean_losses_and_accuracy(corruptions, classification_losses, consistency_losses, consistency2_losses, entropy_losses, accuracies, base_image_save_path='/content/CTTT/SaveImage', title_prefix='Corruptions Losses and Accuracies'):
+    # Ensure the directory exists
+    if not os.path.exists(base_image_save_path):
+        os.makedirs(base_image_save_path)
+    
+    categories = list(corruptions)
+
+    mean_classification_values = list(classification_losses.values())
+    mean_consistency_values = list(consistency_losses.values())
+    mean_consistency2_values = list(consistency2_losses.values())
+    mean_entropy_values = list(entropy_losses.values())
+    accuracy_values = list(accuracies.values())
+    print(accuracy_values)
+    # Calculate total loss as the sum of all losses for each corruption type
+    total_loss_values = [classification + consistency + consistency2 + entropy 
+                         for classification, consistency, consistency2, entropy 
+                         in zip(mean_classification_values, mean_consistency_values, mean_consistency2_values, mean_entropy_values)]
+    print(total_loss_values)
+    print(mean_entropy_values)
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
+
+    # Plot the individual loss values as lines for each component (subplot 1)
+    ax1.plot(categories, mean_classification_values, marker='o', label='Classification Loss', color='skyblue')
+    ax1.plot(categories, mean_consistency_values, marker='o', label='Consistency Loss', color='orange')
+    ax1.plot(categories, mean_consistency2_values, marker='o', label='Consistency2 Loss', color='green')
+    ax1.plot(categories, mean_entropy_values, marker='o', label='Entropy Loss', color='red')
+    ax1.plot(categories, total_loss_values, marker='o', label='Total Loss', color='blue', linestyle='--')  # Adding total loss
+
+    ax1.set_xlabel('Corruption Types', fontsize=14)
+    ax1.set_ylabel('Mean Loss Value', fontsize=14)
+    ax1.set_title('Mean Loss for Each Component and Total Loss by Corruption Type', fontsize=16)
+    ax1.legend()
+    ax1.set_xticks(range(len(categories)))
+    ax1.set_xticklabels(categories, rotation=45, ha='right')
+
+    # Plot the accuracy values as a line plot (subplot 2)
+    ax2.plot(categories, accuracy_values, marker='o', label='Accuracy', color='purple')
+
+    ax2.set_xlabel('Corruption Types', fontsize=14)
+    ax2.set_ylabel('Accuracy (%)', fontsize=14)
+    ax2.set_title('Accuracy by Corruption Type', fontsize=16)
+    ax2.set_xticks(range(len(categories)))
+    ax2.set_xticklabels(categories, rotation=45, ha='right')
+    ax2.legend()
+
+    plt.tight_layout()
+
+    # Save the final aggregated plot
+    save_path = os.path.join(base_image_save_path, f"{title_prefix}_Final_Aggregated.png")
+    plt.savefig(save_path, bbox_inches='tight')
+    print(f"Plot saved to: {save_path}")
+
+    plt.show()
+    plt.close()
+
+
 
 def plot_teacher_predictions_multiple_thresholds_with_accuracy(teacher_pseudo_labels_prob, original_labels, thresholds=[0.5, 0.7, 0.9], base_image_save_path='', title_prefix='Teacher Predictions by Thresholds'):
     
