@@ -70,6 +70,7 @@ def parse_args():
 
 
 
+
 def load_tta_dataset(args):
     # we have 3 choices - every tta_loader returns only point and labels
     root = args.tta_dataset_path  # being lazy - 1
@@ -385,6 +386,7 @@ def main(args):
         'distortion_rbf', 'distortion_rbf_inv', 'density', 'density_inc',
         'shear', 'rotation', 'cutout', 'distortion', 'occlusion', 'lidar'
     ]
+        
     dataset_name = args.dataset_name
     npoints = args.num_point
     num_class = args.num_category
@@ -501,6 +503,11 @@ def main(args):
     teacher_model.eval()
     final_features, final_probability=make_feature(teacher_model)
     
+    total_classification_losses = {corruption: 0.0 for corruption in corruptions}
+    total_consistency_losses = {corruption: 0.0 for corruption in corruptions}
+    total_consistency2_losses = {corruption: 0.0 for corruption in corruptions}
+    total_entropy_losses = {corruption: 0.0 for corruption in corruptions}
+    loss_counts = {corruption: 0 for corruption in corruptions}  # Count the number of losses for averaging
 
 
     final_accuracy = {}
@@ -617,6 +624,17 @@ def main(args):
                                       + lambda_consistency2 * consistency_loss2
                                       + lambda_entropy * entropy_loss_value)
 
+                        scaled_classification_loss = lambda_classification * classification_loss.item()
+                        scaled_consistency_loss = lambda_consistency * consistency_loss.item()
+                        scaled_consistency2_loss = lambda_consistency2 * consistency_loss2.item()
+                        scaled_entropy_loss = lambda_entropy * entropy_loss_value.item()
+
+                        # Accumulate total losses for each corruption type
+                        total_classification_losses[args.corruption] += scaled_classification_loss
+                        total_consistency_losses[args.corruption] += scaled_consistency_loss
+                        total_consistency2_losses[args.corruption] += scaled_consistency2_loss
+                        total_entropy_losses[args.corruption] += scaled_entropy_loss
+                        loss_counts[args.corruption] += 1
 
                         # Backward pass and optimization step
                         total_loss.backward()
@@ -673,6 +691,13 @@ def main(args):
                               f'Total Loss {total_loss.item():.3f}')
 
 
+            # Compute the mean for each scaled loss component after all batches are processed
+            total_classification_losses[args.corruption] /= loss_counts[args.corruption]
+            total_consistency_losses[args.corruption] /= loss_counts[args.corruption]
+            total_consistency2_losses[args.corruption] /= loss_counts[args.corruption]
+            total_entropy_losses[args.corruption] /= loss_counts[args.corruption]
+
+            # Compute accuracy for the corruption type
             acc = (test_pred == test_label).sum().item() / float(test_label.size(0)) * 100.
             log_string(f'\n\n######## Final Accuracy ::: {args.corruption} ::: {acc} ########\n\n')
             final_accuracy[args.corruption] = acc
@@ -689,6 +714,9 @@ def main(args):
     log_string(f'teacher student equal labels ={teacher_student_equal_labels} \n')
 
     # Concatenate the list of probabilities into a single tensor
+
+
+
 
     if args.enable_plots :
 
@@ -713,6 +741,15 @@ def main(args):
                                 strongaug_student_pseudo_labels_prob,
                                 base_image_save_path, "Label condition")
 
+
+        helper_plots.plot_mean_losses_and_accuracy(
+                                    corruptions,
+                                    total_classification_losses,
+                                    total_consistency_losses,
+                                    total_consistency2_losses,
+                                    total_entropy_losses,
+                                    final_accuracy)
+                                     
         helper_plots.plot_teacher_confidence_stacked_bar(teacher_pseudo_labels_prob, base_image_save_path, "Teacher Prediction Confidence Distribution")
         helper_plots.compute_and_plot_metrics_for_corruptions(teacher_pseudo_labels_prob, weakaug_student_pseudo_labels_prob, 
                                                 strongaug_student_pseudo_labels_prob, original_labels,
