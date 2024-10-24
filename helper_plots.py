@@ -365,7 +365,7 @@ def plot_teacher_predictions_multiple_thresholds(teacher_pseudo_labels_prob, ori
         plt.show()
 
 
-def compute_and_plot_metrics_for_corruptions(teacher_pseudo_labels_prob, weakaug_student_pseudo_labels_prob, strongaug_student_pseudo_labels_prob, original_labels, confidence_threshold=0.7, base_image_save_path='', title_prefix='Label Confidence Distribution'):
+def compute_and_plot_metrics_for_corruptions(teacher_pseudo_labels_prob, weakaug_student_pseudo_labels_prob, strongaug_student_pseudo_labels_prob, original_labels, confidence_threshold=0.9, base_image_save_path='', title_prefix='Label Confidence Distribution'):
     # Use the keys of the pseudo-labels dictionaries to find corruption types
     for corruption_type in strongaug_student_pseudo_labels_prob.keys():
 
@@ -398,11 +398,15 @@ def compute_and_plot_metrics_for_corruptions(teacher_pseudo_labels_prob, weakaug
         # Step 4: Calculate metrics for teacher, weakly augmented, and strongly augmented students
         def calculate_metrics(predicted_labels, confidence_scores, true_labels, threshold):
             correct_predictions = (predicted_labels == true_labels).sum().item()
+            incorrect_predictions = (predicted_labels != true_labels).sum().item()
             above_threshold = (confidence_scores > threshold).sum().item()
             correct_and_above_threshold = ((predicted_labels == true_labels) & (confidence_scores > threshold)).sum().item()
             incorrect_and_above_threshold = ((predicted_labels != true_labels) & (confidence_scores > threshold)).sum().item()
             correct_and_below_threshold = ((predicted_labels == true_labels) & (confidence_scores <= threshold)).sum().item()
-            return correct_predictions, above_threshold, correct_and_above_threshold, incorrect_and_above_threshold, correct_and_below_threshold
+            incorrect_and_below_threshold = ((predicted_labels != true_labels) & (confidence_scores <= threshold)).sum().item()
+            return (correct_predictions, above_threshold, correct_and_above_threshold, 
+                    incorrect_and_above_threshold, correct_and_below_threshold, 
+                    incorrect_and_below_threshold, incorrect_predictions)
 
         # Teacher Metrics
         teacher_metrics = calculate_metrics(teacher_confidance_scores_args, teacher_confidance_scores, true_labels, confidence_threshold)
@@ -413,16 +417,15 @@ def compute_and_plot_metrics_for_corruptions(teacher_pseudo_labels_prob, weakaug
         # Strong Augmented Student Metrics
         strongaug_metrics = calculate_metrics(strongaug_student_confidance_scores_args, strongaug_student_confidance_scores, true_labels, confidence_threshold)
 
-
-
         # Step 6: Plot grouped histogram for comparison between Teacher, Weak Augmented, and Strong Augmented students
         categories = ['Correct (Total)', 'Above Threshold (Total)', 'Correct (Above Threshold)', 
-                      'Incorrect (Above Threshold)', 'Correct (Below Threshold)']
+                      'Incorrect (Above Threshold)', 'Correct (Below Threshold)', 
+                      'Incorrect (Below Threshold)', 'Incorrect (Total)']
 
         fig, ax = plt.subplots(figsize=(14, 8))
 
         # Define the bar positions and width
-        bar_width = 0.2
+        bar_width = 0.23
         bar_positions = np.arange(len(categories))
 
         # Plot Teacher, Weak Augmented, and Strong Augmented bars
@@ -445,7 +448,7 @@ def compute_and_plot_metrics_for_corruptions(teacher_pseudo_labels_prob, weakaug
             for bar in bars:
                 yval = bar.get_height()
                 ax.text(bar.get_x() + bar.get_width() / 2, yval + 5, int(yval),
-                        ha='center', va='bottom', fontsize=12, fontweight='bold')
+                        ha='center', va='bottom', fontsize=7, fontweight='bold')
 
         add_labels(teacher_bars)
         add_labels(weakaug_bars)
@@ -723,7 +726,7 @@ def plot_label_situation_function_corruption(teacher_pseudo_labels_dict,
         plt.close()
 
     # Final combined plot (aggregate all corruption types)
-    plt.figure(figsize=(14, 8))
+    plt.figure(figsize=(30, 18))
     x = np.arange(len(teacher_pseudo_labels_dict.keys()))  # Corruption types for x-axis
     width = 0.15
 
@@ -744,7 +747,7 @@ def plot_label_situation_function_corruption(teacher_pseudo_labels_dict,
     for bars in [bars_teacher, bars_weak_student, bars_strong_student, bars_teacher_weak, bars_teacher_strong, bars_strong_weak]:
         for bar in bars:
             yval = bar.get_height()
-            plt.text(bar.get_x() + bar.get_width() / 2, yval, int(yval), ha='center', va='bottom')
+            plt.text(bar.get_x() + bar.get_width() / 2, yval, int(yval), ha='center', va='bottom',fontsize=5)
 
     # Move the legend outside the plot area with more descriptive labels
     plt.legend(loc='upper left', bbox_to_anchor=(1, 1), borderaxespad=0.)
