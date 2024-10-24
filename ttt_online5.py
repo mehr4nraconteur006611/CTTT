@@ -60,7 +60,7 @@ def parse_args():
     parser.add_argument('--disable_bn_adaptation', action='store_true', help='Disable batch normalization adaptation')
     parser.add_argument('--stride_step', type=int, default=1, help='Stride step for logging or operations')
     parser.add_argument('--batch_size_tta', type=int, default=1, help='batch size in training')
-    parser.add_argument('--enable_plots', action='store_true', default=True, help='plots images')
+    parser.add_argument('--enable_plots', type=bool, default=True, help='plots images')
     parser.add_argument('--IWF', action='store_true', default=True, help='enable invariant weak Filtering')
     parser.add_argument('--label_refinement', action='store_true', default=True, help='enable pseudo label refinement')
     parser.add_argument('--seed', type=int, default=10, help='random seed for reproducibility')
