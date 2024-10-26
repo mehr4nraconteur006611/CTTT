@@ -61,8 +61,8 @@ def parse_args():
     parser.add_argument('--stride_step', type=int, default=1, help='Stride step for logging or operations')
     parser.add_argument('--batch_size_tta', type=int, default=1, help='batch size in training')
     parser.add_argument('--enable_plots', type=bool, default=True, help='plots images')
-    parser.add_argument('--IWF', type=bool, default=True, help='enable invariant weak Filtering')
-    parser.add_argument('--label_refinement', type=bool, default=True, help='enable pseudo label refinement')
+    parser.add_argument('--IWF',  type=bool, default=False, help='enable invariant weak Filtering')
+    parser.add_argument('--label_refinement', type=bool, default=False, help='enable pseudo label refinement')
     parser.add_argument('--seed', type=int, default=10, help='random seed for reproducibility')
     
     return parser.parse_args()
@@ -249,7 +249,7 @@ def assign_pseudo_labels_with_confidence_logic(stu_pred, aug_stu_pred, teacher_p
     - If teacher's confidence is between 0.9 and 0.7, use the average of teacher and student.
     - If teacher's confidence is < 0.7, use the mean of teacher, student, and augmented student predictions.
     """
-    
+    print('salam')
     stu_confidence, stu_labels = torch.max(F.softmax(stu_pred, dim=1), dim=1)  
     teacher_confidence, teacher_labels = torch.max(F.softmax(teacher_pred, dim=1), dim=1)  
     
@@ -517,11 +517,11 @@ def main(args):
     correct_student_pseudo_labels = {}
     teacher_student_equal_labels = {}
 
-    lambda_classification = 0.6
-    lambda_consistency = 0.4  
-    lambda_consistency2 =0.07  
+    lambda_classification = 1
+    lambda_consistency = 0 
+    lambda_consistency2 =0  
 
-    lambda_entropy = 3.5 
+    lambda_entropy = 0 
 
     for args.severity in level:
         for corr_id, args.corruption in enumerate(corruptions):
@@ -568,9 +568,10 @@ def main(args):
                         if args.IWF:
                             points = process_point_cloud(points1, neighbour=5).reshape(1,-1,3)
                             points = points.permute(0, 2, 1)  # Now the shape will be [1, 3, 1024]
+                        else: 
+                            points = points.permute(0, 2, 1) 
 
                         points1 = points1.permute(0, 2, 1)  # Now the shape will be [1, 3, 1024]
-
                         labels = labels.to(args.device)
                         pred_teacher, _ ,_= teacher_model(points)
                         pseudo_labels = pred_teacher.argmax(dim=1).to(args.device)
