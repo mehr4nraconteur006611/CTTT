@@ -20,6 +20,7 @@ import os
 import matplotlib.pyplot as plt
 import torch.nn.functional as F
 from models.pointnet.model import PointNetLwf, PointNetCls2, PointNetCls_pointmlp, PointNetCls_DGCNN, PointNetClsFPFH, PointNet2Cls
+from losses import SupConLoss
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -573,13 +574,30 @@ def main(args):
 
                         points1 = points1.permute(0, 2, 1)  # Now the shape will be [1, 3, 1024]
                         labels = labels.to(args.device)
-                        pred_teacher, _ ,_= teacher_model(points)
+                        pred_teacher, _ ,teacher_feature= teacher_model(points)
                         pseudo_labels = pred_teacher.argmax(dim=1).to(args.device)
                         pseudo_labels = pseudo_labels.long().to(args.device)
                         
                         pred_student_original, trans_feat_original,_ = student_model(points)
                         pred_student = pred_student_original.argmax(dim=1).to(args.device)
                         stu_pseudo_labels = pred_student.long().to(args.device)
+
+                        teacher_feature = teacher_feature / teacher_feature.norm(dim=1, keepdim=True)
+
+                        # define loss with a temperature `temp`
+                        criterion = SupConLoss(temperature=0.01)
+
+                        # features: [bsz, n_views, f_dim]
+                        # `n_views` is the number of crops from each image
+                        # better be L2 normalized in f_dim dimension
+                        features = teacher_feature
+                        # labels: [bsz]
+                        labels = pseudo_labels
+
+                        # SupContrast
+                        loss = criterion(features, labels)
+
+
 
                         #pseudo_labels = torch.max(pred_teacher, pred_student_original).argmax(dim=1).to(args.device)                 
 
