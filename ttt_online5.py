@@ -20,6 +20,7 @@ import os
 import matplotlib.pyplot as plt
 import torch.nn.functional as F
 from models.pointnet.model import PointNetLwf, PointNetCls2, PointNetCls_pointmlp, PointNetCls_DGCNN, PointNetClsFPFH, PointNet2Cls
+from losses import SupConLoss
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -61,8 +62,8 @@ def parse_args():
     parser.add_argument('--stride_step', type=int, default=1, help='Stride step for logging or operations')
     parser.add_argument('--batch_size_tta', type=int, default=1, help='batch size in training')
     parser.add_argument('--enable_plots', type=bool, default=True, help='plots images')
-    parser.add_argument('--IWF', type=bool, default=True, help='enable invariant weak Filtering')
-    parser.add_argument('--label_refinement', type=bool, default=True, help='enable pseudo label refinement')
+    parser.add_argument('--IWF',  type=bool, default=False, help='enable invariant weak Filtering')
+    parser.add_argument('--label_refinement', type=bool, default=False, help='enable pseudo label refinement')
     parser.add_argument('--seed', type=int, default=10, help='random seed for reproducibility')
     
     return parser.parse_args()
@@ -223,6 +224,47 @@ def augment_data(points):
     return rotated_points
 
 
+
+def augment_data2(points):
+    """ Apply common weak augmentations to point cloud data with random augmentations. """
+    # Change seed inside the function to ensure diversity in augmentations
+    random.seed()  # Reset seed to system time (non-deterministic)
+    torch.manual_seed(torch.randint(0, 10000, (1,)).item())
+
+   # Random scaling
+    scale = torch.FloatTensor(points.shape[0], 1, 1).uniform_(0.999, 1.001).to(points.device)
+    scaled_points = points * scale
+
+    # Random translation
+    translation = torch.FloatTensor(points.shape[0], 3, 1).uniform_(-0.01, 0.01).to(points.device)
+    translated_points = scaled_points + translation
+ 
+    # Random jittering (small noise)
+    jitter = torch.randn_like(translated_points) * 0.01
+    jittered_points = translated_points + jitter
+
+    # Cutout augmentation (removing random points)
+    num_points_to_remove = int(0.15 * points.shape[2])  # Remove 10% of the points
+    mask = torch.ones(points.shape[2], dtype=torch.bool)
+    drop_indices = torch.randperm(points.shape[2])[:num_points_to_remove]
+    mask[drop_indices] = False
+    cutout_points = jittered_points[:, :, mask]
+
+    # Random rotation around the z-axis (yaw) with constraints
+    angle = torch.FloatTensor(1).uniform_(-0.01, 0.01).to(points.device)  # Slight rotation
+    cos_val = torch.cos(angle)
+    sin_val = torch.sin(angle)
+    rotation_matrix = torch.tensor([
+        [cos_val, -sin_val, 0],
+        [sin_val, cos_val, 0],
+        [0, 0, 1]
+    ], dtype=torch.float32).to(points.device)
+    rotated_points = torch.matmul(cutout_points.transpose(2, 1), rotation_matrix).transpose(2, 1)
+
+    # Return the augmented points
+    return rotated_points
+
+
 def generate_weighted_pseudo_labels(stu_pred, aug_stu_pred, teacher_pred, teacher_weight=2.0, label_smoothing=0.1):
     # Apply weighting to the teacher probabilities
     weighted_teacher_pred = teacher_weight * teacher_pred
@@ -249,7 +291,7 @@ def assign_pseudo_labels_with_confidence_logic(stu_pred, aug_stu_pred, teacher_p
     - If teacher's confidence is between 0.9 and 0.7, use the average of teacher and student.
     - If teacher's confidence is < 0.7, use the mean of teacher, student, and augmented student predictions.
     """
-    
+    print('salam')
     stu_confidence, stu_labels = torch.max(F.softmax(stu_pred, dim=1), dim=1)  
     teacher_confidence, teacher_labels = torch.max(F.softmax(teacher_pred, dim=1), dim=1)  
     
@@ -517,12 +559,13 @@ def main(args):
     correct_student_pseudo_labels = {}
     teacher_student_equal_labels = {}
 
-    lambda_classification = 0.6
-    lambda_consistency = 0.4  
-    lambda_consistency2 =0.07  
+    lambda_classification = 0
+    lambda_consistency = 0.5 
+    lambda_consistency2 =0  
 
-    lambda_entropy = 3.5 
+    lambda_entropy = 0 
 
+    first_sample_flag = 1
     for args.severity in level:
         for corr_id, args.corruption in enumerate(corruptions):
             if args.corruption == 'clean':
@@ -568,17 +611,50 @@ def main(args):
                         if args.IWF:
                             points = process_point_cloud(points1, neighbour=5).reshape(1,-1,3)
                             points = points.permute(0, 2, 1)  # Now the shape will be [1, 3, 1024]
+                        else:
+                            points = points.permute(0, 2, 1) 
 
                         points1 = points1.permute(0, 2, 1)  # Now the shape will be [1, 3, 1024]
 
                         labels = labels.to(args.device)
-                        pred_teacher, _ ,_= teacher_model(points)
+                        pred_teacher, _ ,teacher_feature= teacher_model(points)
                         pseudo_labels = pred_teacher.argmax(dim=1).to(args.device)
                         pseudo_labels = pseudo_labels.long().to(args.device)
-                        
-                        pred_student_original, trans_feat_original,_ = student_model(points)
+                                                
+                        augmented_points2 = augment_data2(points)
+                        pred_teacher2, _ ,teacher_feature2= teacher_model(augmented_points2)
+
+
+                        #student
+                        pred_student_original, trans_feat_original,student_feature = student_model(points)
                         pred_student = pred_student_original.argmax(dim=1).to(args.device)
                         stu_pseudo_labels = pred_student.long().to(args.device)
+
+                        # Define SupConLoss for contrastive feature loss
+                        contrastive_criterion = SupConLoss(temperature=0.01)
+                        teacher_feature = F.normalize(teacher_feature, p=2, dim=-1)
+                        if torch.isnan(teacher_feature).any() or torch.isinf(teacher_feature).any():
+                            print("Warning: teacher_feature contains NaN or Inf values.")
+
+                        if first_sample_flag == 1:
+                            contrastive_loss=0
+                            teacher_feature1 = teacher_feature.reshape(1, 1, 1024)  # Example shape: [1, 1, 1024]
+                            teacher_feature2 = teacher_feature2.reshape(1, 1, 1024)  # Example shape: [1, 1, 1024]
+                            features1 = torch.cat([teacher_feature1, teacher_feature2],dim=1)
+                            first_sample_flag = 0
+                        else :
+                            # Reshape teacher_feature to [bsz, n_views, f_dim] and calculate contrastive loss
+                            teacher_feature1 = teacher_feature.reshape(1, 1, 1024)  # Example shape: [1, 1, 1024]
+                            teacher_feature2 = teacher_feature2.reshape(1, 1, 1024)  # Example shape: [1, 1, 1024]
+                            features1 = torch.cat([teacher_feature1, teacher_feature2],dim=1)
+                            features = torch.cat([ features2, features1],dim=0)
+                            pseudo_labels_batch = torch.cat([pseudo_labels2.unsqueeze(0), pseudo_labels.unsqueeze(0)],dim=0)
+
+
+                            contrastive_loss = contrastive_criterion(features, pseudo_labels_batch)
+
+                        features2 = features1.clone()
+                        pseudo_labels2 = pseudo_labels.clone()
 
                         #pseudo_labels = torch.max(pred_teacher, pred_student_original).argmax(dim=1).to(args.device)                 
 
@@ -603,10 +679,10 @@ def main(args):
                         entropy_loss_value = entropy_loss(pred_student_original)
 
                         total_loss = (lambda_classification*classification_loss 
-                                      + lambda_consistency * consistency_loss
+                                      + lambda_consistency * contrastive_loss
                                       + lambda_consistency2 * consistency_loss2
                                       + lambda_entropy * entropy_loss_value)
-
+                        #print(total_loss)
                         scaled_classification_loss = lambda_classification * classification_loss.item()
                         scaled_consistency_loss = lambda_consistency * consistency_loss.item()
                         scaled_consistency2_loss = lambda_consistency2 * consistency_loss2.item()
@@ -659,7 +735,7 @@ def main(args):
                 test_pred = torch.cat((test_pred, pred.unsqueeze(0)), dim=0)
                 test_label = torch.cat((test_label, target.unsqueeze(0)), dim=0)
                     
-                if idx % 200 == 0 and idx!=0 :
+                if idx % 1 == 0 and idx!=0 :
                     acc = (test_pred == test_label).sum().item() / float(len(test_label)) * 100.
                     intermediate_accuracy = (test_pred == test_label).sum().item() / float(test_label.size(0)) * 100.
 
