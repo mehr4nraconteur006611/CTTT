@@ -26,8 +26,11 @@ from diffusion.build_model import get_model
 from diffusion.utils import *
 # get_model, ModelNet40C, ImbalancedDatasetSampler
 from diffusion.pc_utils import *
-from chamfer_distance import ChamferDistance as chamfer_dist
-chamfer_dist_fn = chamfer_dist()
+# from chamfer_distance import ChamferDistance as chamfer_dist
+# chamfer_dist_fn = chamfer_dist()
+
+from MATE.extensions.chamfer_dist import ChamferDistanceL1, ChamferDistanceL2
+
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -235,6 +238,13 @@ def cloudfixer(args, model, x, mask, ind, verbose=False):
         end_factor=args.optim_end_factor,
     )
 
+    loss_type = "cdl1"
+    if loss_type == "cdl1":
+        loss_func = ChamferDistanceL1().cuda()
+    elif loss_type == 'cdl2':
+        loss_func = ChamferDistanceL2().cuda()
+
+
     iterator = tqdm(range(args.n_update)) if verbose else range(args.n_update)
     for iter in iterator:
         optim.zero_grad()
@@ -258,8 +268,10 @@ def cloudfixer(args, model, x, mask, ind, verbose=False):
                 t=t,
                 node_mask=node_mask,
             )
-        dist1, dist2, _, _ = chamfer_dist_fn(x_trans, x_trans_est)
-        matching = dist1.mean() + dist2.mean()
+        # dist1, dist2, _, _ = chamfer_dist_fn(x_trans, x_trans_est)
+        # matching = dist1.mean() + dist2.mean()
+
+        matching = loss_func(x_trans, x_trans_est)
         L2_norm = (delta.pow(2) * weight[:, :, None]).sum(dim=1).mean()
         norm = L2_norm * (
             args.lam_h * (1 - iter / args.n_update) + args.lam_l * iter / args.n_update
@@ -366,6 +378,11 @@ class MyDiffusion(nn.Module):
         args.diffusion_noise_precision = 1e-5
         args.diffusion_loss_type = "l2"
         args.diffusion_dir = args.model_path+"diffusion.npy"
+        # args.diffusion_dir = args.model_path+"diffusion_release.npy"
+        # args.diffusion_dir = args.model_path+"diffusion_modelnet.npy"
+        # args.diffusion_dir = args.model_path+"diffusion_scannet.npy"
+        # args.diffusion_dir = args.model_path+"diffusion_shapecore.npy"
+        # args.diffusion_dir = args.model_path+"diffusion_shapenet.npy"
 
         args.lam_h = 0
         args.lam_l = 0
@@ -626,7 +643,7 @@ def main(args):
     log_string('Load dataset ...')
 
     corruptions = [
-        'uniform', 'gaussian', 'background', 'impulse', 'upsampling',
+        'background', 'uniform', 'gaussian', 'impulse', 'upsampling',
         'distortion_rbf', 'distortion_rbf_inv', 'density', 'density_inc',
         'shear', 'rotation', 'cutout', 'distortion', 'occlusion', 'lidar'
     ]
@@ -813,6 +830,7 @@ def main(args):
     lambda_consistency2 =0.07  
 
     lambda_entropy = 3.5 
+    nnn=0
 
     for args.severity in level:
         for corr_id, args.corruption in enumerate(corruptions):
@@ -888,25 +906,34 @@ def main(args):
 
                 for grad_step in range(args.grad_steps):
                     if dataset_name == 'modelnet':
+                        # print('data[0] ',data[0].shape)
+                        # print('data[1] ',data[1])
                         points1 = data[0].to(args.device)
                         points = points1.clone()
 
-                        print('difussion 1.9')
+                        # print('difussion 1.9')
                         if args.denoising == 'diffusion':
-                            print('difussion 2')
-                            print('points ',points.shape)
+                            # print('difussion 2')
+                            # print('points ',points.shape)
+                            # print('data[0] ',data[0].shape)
+                            # print('data[1] ',data[1].shape)
                             x = data[0].to(device)
-                            save_point_cloud_as_ply(x[0].cpu().detach().numpy(), '/content/a.ply')
+                            save_point_cloud_as_ply(x[0].cpu().detach().numpy(), f'/content/a_{args.diffusion_dir.split("/")[-1].split(".")[0]}.ply')
                             labels = data[1].to(device).flatten()
                             mask = data[-2].to(device)
                             ind = data[-1].to(device)
                             points = process_point_cloud_diffusion(x, mask, ind)
-                            save_point_cloud_as_ply(x[0].cpu().detach().numpy(), '/content/b.ply')
-
+                            save_point_cloud_as_ply(points[0].cpu().detach().numpy(), f'/content/b_{args.diffusion_dir.split("/")[-1].split(".")[0]}.ply')
+                            
+                            # if data[1]==0:
+                            #     nnn+=1
+                            #     if nnn>=55:
+                            #         ssdasdasd=asdadasdaslk
+                            
                             points = points.permute(0, 2, 1)  # Now the shape will be [1, 3, 1024]
 
-                            print('points ',points.shape)
-                            print('difussion 3')
+                            # print('points ',points.shape)
+                            # print('difussion 3')
 
                         elif args.denoising == 'IWF':
 
@@ -915,7 +942,7 @@ def main(args):
                             points = points.reshape(1,-1,3).permute(0, 2, 1)  # Now the shape will be [1, 3, 1024]
                         
 
-                        print('difussion 4')
+                        # print('difussion 4')
 
                         points1 = points1.permute(0, 2, 1)  # Now the shape will be [1, 3, 1024]
 
