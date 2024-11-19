@@ -1099,7 +1099,7 @@ def main(args):
                         elif args.denoising == 'IWF':
 
                             labels = data[1].to(device).flatten()
-                            points = process_point_cloud_IWF(points1)
+                            points = process_point_cloud(points1)
                             points = points.reshape(1,-1,3).permute(0, 2, 1)  # Now the shape will be [1, 3, 1024]
                         
 
