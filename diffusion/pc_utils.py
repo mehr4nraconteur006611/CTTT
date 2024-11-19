@@ -349,6 +349,34 @@ def rotate_pc(pointcloud, reverse=False):
         pointcloud = rotate_shape(pointcloud, "x", -np.pi / 2)
     return pointcloud
 
+# def inv_rotate_pc(pointcloud, reverse=False):
+#     if reverse:
+#         pointcloud = rotate_shape(pointcloud, "x", -np.pi / 2)
+#     else:
+#         pointcloud = rotate_shape(pointcloud, "x", np.pi / 2)
+#     return pointcloud
+
+def inv_rotate_pc(pointcloud, reverse=False):
+    # Define the rotation matrix for a 90-degree rotation around the x-axis
+    if reverse:
+        rotation_matrix = torch.tensor([
+            [1, 0, 0],
+            [0, 0, -1],
+            [0, 1, 0]
+        ], dtype=pointcloud.dtype, device=pointcloud.device)
+    
+    else:
+        rotation_matrix = torch.tensor([
+            [1, 0, 0],
+            [0, 0, 1],
+            [0, -1, 0]
+        ], dtype=pointcloud.dtype, device=pointcloud.device)
+
+        
+    # Apply the rotation matrix to the point cloud
+    rotated_pointcloud = torch.matmul(pointcloud, rotation_matrix.T)
+    
+    return rotated_pointcloud
 
 def rotate_shape(x, axis, angle):
     """
