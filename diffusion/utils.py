@@ -153,6 +153,29 @@ class ImbalancedDatasetSampler(torch.utils.data.sampler.Sampler):
         return self.num_samples
 
 
+import open3d as o3d
+import numpy as np
+
+def save_point_cloud_as_ply(point_cloud, file_path):
+    """
+    Save a point cloud as a .ply file.
+
+    Parameters:
+    - point_cloud: numpy array or torch tensor of shape (N, 3)
+    - file_path: str, the path where the .ply file will be saved
+    """
+    # Convert the point cloud to a numpy array if it's a torch tensor
+    if isinstance(point_cloud, torch.Tensor):
+        point_cloud = point_cloud.cpu().numpy()
+    
+    # Create an Open3D point cloud object
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(point_cloud)
+    
+    # Save the point cloud as a .ply file
+    o3d.io.write_point_cloud(file_path, pcd)
+    print(f"Point cloud saved to {file_path}")
+
 
 class ModelNet40C(Dataset):
     def __init__(self, args, partition):
@@ -416,6 +439,9 @@ class ModelNet40C(Dataset):
         mask = np.ones((len(pointcloud), 1)).astype(pointcloud.dtype)
         ind = np.arange(len(pointcloud))
 
+        # if label == 0:
+        #     save_point_cloud_as_ply(pointcloud, f'/content/init.ply')
+
         # identify duplicated points
         if (
             "occlusion" in self.corruption
@@ -443,6 +469,7 @@ class ModelNet40C(Dataset):
             pointcloud = scale(pointcloud, "unit_std")
             pointcloud = rotate_pc(pointcloud)
             if self.random_rotation:
+                # print('bad bakht')
                 pointcloud = random_rotate_one_axis(pointcloud, "z")
 
         if self.jitter:
