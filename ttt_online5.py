@@ -29,7 +29,7 @@ from diffusion.pc_utils import *
 # from chamfer_distance import ChamferDistance as chamfer_dist
 # chamfer_dist_fn = chamfer_dist()
 
-from MATE.extensions.chamfer_dist import ChamferDistanceL1, ChamferDistanceL2
+from extensions.chamfer_dist import ChamferDistanceL1, ChamferDistanceL2
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -160,17 +160,38 @@ class IWF(nn.Module):
         point_cloud = point_cloud[mask]
         
         # Normalize the point cloud
-        point_cloud = self.pc_normalize(point_cloud)
+        point_cloud = pc_normalize(point_cloud)
         
         return point_cloud
 
-    def pc_normalize(pc):
-        centroid = torch.mean(pc, axis=0)
-        pc = pc - centroid
-        m = torch.max(torch.sqrt(torch.sum(pc**2, dim=1)))
-        pc = pc / m
-        return pc
+# def pc_normalize(pc):
+#     print('pc ',pc.shape)
+#     centroid = torch.mean(pc, axis=0)
+#     print('centroid ',centroid.shape)
+#     pc = pc - centroid
+#     print('pc ',pc.shape)
+#     m = torch.max(torch.sqrt(torch.sum(pc**2, dim=1)))
+#     pc = pc / m
+#     print('pc ',pc.shape)
+#     return pc
 
+def pc_normalize(pc_batch):
+    # Compute the centroid for each point cloud in the batch
+    # print('pc_batch shape:', pc_batch.shape)
+    centroid = torch.mean(pc_batch, dim=1, keepdim=True)
+    # print('centroid shape:', centroid.shape)
+    
+    # Subtract the centroid from each point cloud
+    pc_batch = pc_batch - centroid
+    
+    # Compute the maximum norm for each point cloud in the batch
+    m = torch.max(torch.sqrt(torch.sum(pc_batch**2, dim=2, keepdim=True)), dim=1, keepdim=True)[0]
+    
+    # Normalize each point cloud by its maximum norm
+    pc_batch = pc_batch / m
+    # print('pc_batch shape:', pc_batch.shape)
+    
+    return pc_batch
 
 
 @torch.enable_grad()
@@ -183,6 +204,7 @@ def cloudfixer(args, model, x, mask, ind, verbose=False):
         last_epoch=-1,
         end_factor=0,
     ):
+
         """
         Create a schedule with a learning rate that decreases linearly after linearly increasing during a warmup period.
         """
@@ -197,7 +219,7 @@ def cloudfixer(args, model, x, mask, ind, verbose=False):
             )
 
         return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda, last_epoch)
-
+    
     ######################## End Scheduler ########################
     _, knn_dist_square_mean = knn(
         x.transpose(2, 1),
@@ -206,6 +228,7 @@ def cloudfixer(args, model, x, mask, ind, verbose=False):
         ind=ind,
         return_dist=True,
     )
+    
     knn_dist_square_mean = knn_dist_square_mean[torch.arange(x.size(0))[:, None], ind]
     weight = 1 / knn_dist_square_mean.pow(args.pow)
     if not args.weighted_reg:
@@ -354,14 +377,135 @@ class MyDiffusion(nn.Module):
         # parser.add_argument("--denoising_thrs", type=int, default=0)
         # parser.add_argument("--vote", type=int, default=1)
          
+# #################### placeholders ####################
+# # lame
+# lame_affinity=rbf
+# lame_knn=3
+# lame_max_steps=1
+
+# # sar
+# sar_ent_threshold=0.4
+# sar_eps_threshold=0.05
+
+# # memo
+# memo_num_augs=64
+# memo_bn_momentum=1/17
+
+# # dua
+# dua_mom_pre=0.1
+# dua_min_mom=0.005
+# dua_decay_factor=0.94
+
+# # bn_stats
+# bn_stats_prior=0
+
+# # shot
+# shot_pl_loss_weight=0.3
+
+# # dda
+# dda_steps=50
+# dda_guidance_weight=6
+# dda_lpf_method=fps
+# dda_lpf_scale=4
+
+# # cloudfixer
+# t_min=0.02
+# t_len=0.1
+# pow=1
+# lam_l=1
+# lam_h=10
+# lr=0.2
+# # steps=30
+# steps=1
+# warmup=0.2
+# wd=0
+# optim=adamax
+# optim_end_factor=0.05
+# subsample=2048
+# weighted_reg=True
+# rotation=0.02
+# vote=1
+
+# # cloudfixer-o
+# num_steps=1 # 0 TODO for tent # placeholder
+# episodic=True # placeholder
+# test_optim=AdamW # placeholder
+# test_lr=1e-4 #
+# params_to_adapt="LN GN BN" # placeholder
+# ######################################################
+
+# run_baselines() {
+#     python adapt.py \
+#         --t_min ${t_min} \
+#         --t_len ${t_len} \
+#         --warmup ${warmup} \
+#         --input_lr ${lr} \
+#         --rotation ${rotation} \
+#         --random_seed ${random_seed} \
+#         --pow ${pow} \
+#         --diffusion_steps 500 \
+#         --diffusion_noise_schedule polynomial_2 \
+#         --batch_size ${batch_size} \
+#         --scale_mode unit_std \
+#         --cls_scale_mode unit_norm \
+#         --dataset ${dataset} \
+#         --dataset_dir ${dataset_dir} \
+#         --scenario ${scenario} \
+#         --imb_ratio ${imb_ratio} \
+#         --classifier ${classifier} \
+#         --classifier_dir ${classifier_dir} \
+#         --diffusion_dir ${diffusion_dir} \
+#         --method ${method} \
+#         --adv_attack ${adv_attack} \
+#         --episodic ${episodic} \
+#         --test_optim ${test_optim} \
+#         --num_steps ${num_steps} \
+#         --test_lr ${test_lr} \
+#         --params_to_adapt ${params_to_adapt} \
+#         --lame_affinity ${lame_affinity} \
+#         --lame_knn ${lame_knn} \
+#         --lame_max_steps ${lame_max_steps} \
+#         --sar_ent_threshold ${sar_ent_threshold} \
+#         --sar_eps_threshold ${sar_eps_threshold} \
+#         --memo_bn_momentum ${memo_bn_momentum} \
+#         --memo_num_augs ${memo_num_augs} \
+#         --dua_mom_pre ${dua_mom_pre} \
+#         --dua_min_mom ${dua_min_mom} \
+#         --dua_decay_factor ${dua_decay_factor} \
+#         --bn_stats_prior ${bn_stats_prior} \
+#         --shot_pl_loss_weight ${shot_pl_loss_weight} \
+#         --dda_steps ${dda_steps} \
+#         --dda_guidance_weight ${dda_guidance_weight} \
+#         --dda_lpf_method ${dda_lpf_method} \
+#         --dda_lpf_scale ${dda_lpf_scale} \
+#         --out_path ${out_path} \
+#         --exp_name ${exp_name} \
+#         --mode ${mode} \
+#         --use_best_hparam \
+#         --model transformer \
+#         --input_lr ${lr} \
+#         --n_update ${steps} \
+#         --weight_decay ${wd} \
+#         --lam_l ${lam_l} \
+#         --lam_h ${lam_h} \
+#         --beta1 0.9 \
+#         --beta2 0.999 \
+#         --optim ${optim} \
+#         --optim_end_factor ${optim_end_factor} \
+#         --subsample ${subsample} \
+#         --weighted_reg ${weighted_reg} \
+#         --vote ${vote} \
+#         --no_wandb \
+#         2>&1
+# }
 
 
         args.vote = 1
-        args.n_update = 30
+        args.n_update = 80
         args.pow = 1
         args.knn = 5
-        args.input_lr = 1e-2
-        args.rotation = 0.1
+        args.input_lr = 0.2 #1e-2
+        args.rotation = 0.02
         args.weight_decay = 0
         args.weighted_reg = True
         args.warmup = 0.2
@@ -384,8 +528,8 @@ class MyDiffusion(nn.Module):
         # args.diffusion_dir = args.model_path+"diffusion_shapecore.npy"
         # args.diffusion_dir = args.model_path+"diffusion_shapenet.npy"
 
-        args.lam_h = 0
-        args.lam_l = 0
+        args.lam_h = 10
+        args.lam_l = 1
 
         args.t_min = 0.02
         args.t_len = 0.1
@@ -399,7 +543,9 @@ class MyDiffusion(nn.Module):
         self.model = nn.DataParallel(self.model)
         self.model = self.model.to(device).eval()
 
-    def forward(self, x, mask, ind):        
+    def forward(self, x, mask, ind, update1=30):        
+
+        self.args.n_update = update1
 
         x_list = [
             cloudfixer(self.args, self.model, x, mask, ind).detach().clone()
@@ -407,6 +553,15 @@ class MyDiffusion(nn.Module):
         ]
         x = x_list[0]
 
+        # x = torch.asarray(inv_rotate_pc(x.cpu().detach().numpy())).to(args.device)
+        # save_point_cloud_as_ply(x[0].cpu().detach().numpy(), f'/content/b1.ply')
+
+        x = inv_rotate_pc(x)
+        # save_point_cloud_as_ply(x[0].cpu().detach().numpy(), f'/content/b2.ply')
+
+        x = pc_normalize(x)
+        # save_point_cloud_as_ply(x[0].cpu().detach().numpy(), f'/content/b3.ply')
+        
         return x 
 
 
@@ -848,11 +1003,11 @@ def main(args):
                 parser.add_argument("--imb_ratio", type=float, default=0)
                 parser.add_argument("--rotate", type=eval, default=True)
                 '''
-                args.rotate = False
+                args.rotate = True
                 args.dataset_dir = args.tta_dataset_path
                 args.adv_attack = False
                 args.scenario = "normal"
-                args.imb_ratio = 0
+                args.imb_ratio = 1
                 args.dataset = f'modelnet40c_{args.corruption}_5'
                 args.num_workers = 2
 
@@ -917,17 +1072,23 @@ def main(args):
                             # print('points ',points.shape)
                             # print('data[0] ',data[0].shape)
                             # print('data[1] ',data[1].shape)
-                            x = data[0].to(device)
-                            save_point_cloud_as_ply(x[0].cpu().detach().numpy(), f'/content/a_{args.diffusion_dir.split("/")[-1].split(".")[0]}.ply')
+
+                            x = data[0].to(device)                            
                             labels = data[1].to(device).flatten()
+                            
                             mask = data[-2].to(device)
                             ind = data[-1].to(device)
                             points = process_point_cloud_diffusion(x, mask, ind)
-                            save_point_cloud_as_ply(points[0].cpu().detach().numpy(), f'/content/b_{args.diffusion_dir.split("/")[-1].split(".")[0]}.ply')
+                            
+                            # points = x.clone()
                             
                             # if data[1]==0:
                             #     nnn+=1
-                            #     if nnn>=55:
+                            #     if nnn>=1:
+                            #         save_point_cloud_as_ply(x[0].cpu().detach().numpy(), f'/content/a_{args.diffusion_dir.split("/")[-1].split(".")[0]}.ply')
+                            
+                                    
+                            #         save_point_cloud_as_ply(points[0].cpu().detach().numpy(), f'/content/b_{args.diffusion_dir.split("/")[-1].split(".")[0]}.ply')
                             #         ssdasdasd=asdadasdaslk
                             
                             points = points.permute(0, 2, 1)  # Now the shape will be [1, 3, 1024]
@@ -1034,7 +1195,7 @@ def main(args):
                 test_pred = torch.cat((test_pred, pred.unsqueeze(0)), dim=0)
                 test_label = torch.cat((test_label, target.unsqueeze(0)), dim=0)
                     
-                if idx % 200 == 0 and idx!=0 :
+                if idx % 10 == 0 and idx!=0 :
                     acc = (test_pred == test_label).sum().item() / float(len(test_label)) * 100.
                     intermediate_accuracy = (test_pred == test_label).sum().item() / float(test_label.size(0)) * 100.
 
